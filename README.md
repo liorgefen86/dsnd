@@ -1,2 +1,3 @@
-# dsnd
-Udacity Data Scientist Nanodegree
+# Data Scientist Nanodegree
+
+Repository used for working on excercices from the nanodegree.
