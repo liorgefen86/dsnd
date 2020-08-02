@@ -1,6 +1,7 @@
 import requests
 import json
 import math
+import os
 import pandas as pd
 from pandas import DataFrame
 import logging
@@ -21,7 +22,8 @@ class WorldBankData:
     base_api_url = "http://api.worldbank.org/v2"
 
     def __init__(self, indicator: str = 'SP.POP.TOTL', country: str = 'all',
-                 date: str = '1960:2019', **args):
+                 date: str = '1960:2019', file_name: str = None,
+                 over_write: bool = False, **args):
         """
         Class used to interact with World Bank database
         Args:
@@ -33,6 +35,18 @@ class WorldBankData:
         logger.info('Initiating WoldBankData object')
         self.indicator = indicator
         self.country = country
+        if not file_name:
+            file_name = self.define_file_name()
+        elif 'json' not in file_name.lower():
+            file_name = f'{file_name}.json'
+        self.file_name = file_name
+        logger.info(f'The data will be saved in "{self.file_name}"')
+        if self.check_file_exist(self.file_name) and not over_write:
+            error_message = f'File already exists. Please delete it or set ' \
+                            f'"over_write" to "True"'
+            logger.error(error_message)
+            raise FileExistsError(error_message)
+
         self.date = date
         self.args = args
         self.url = self._create_url()
@@ -67,8 +81,10 @@ class WorldBankData:
              None
         """
         logger.info('Starting getting data from World Bank database')
+        n_pages = 0
 
         def get_data(page: int = 1, per_page: int = 1):
+            nonlocal n_pages
             params = {
                 'format': 'json',
                 'per_page': per_page,
@@ -125,17 +141,17 @@ class WorldBankData:
             logger.error(error_message)
             raise ValueError(error_message)
 
-        if not file_name:
-            file_name = f'{self.indicator}.{self.country}'
-
         if self.data_transformed:
             logger.info(f'Saving transformed data to file - {file_name}')
-            self.data.to_json(f'{file_name}.json', orient='records',
+            self.data.to_json(self.file_name, orient='records',
                               lines=True)
         else:
             logger.info(f'Saving data to file - {file_name}')
-            with open(f'{file_name}.json', 'w', encoding='utf8') as file:
+            with open(self.file_name, 'w', encoding='utf8') as file:
                 json.dump(self.data, file, indent=4, ensure_ascii=False)
+
+    def define_file_name(self):
+        return f'{self.indicator}_{self.country}.json'
 
     def transform_data(self) -> DataFrame:
         """
@@ -170,3 +186,7 @@ class WorldBankData:
         data = WorldBankData(indicator='source')
         data.get()
         data.save('sources')
+
+    @staticmethod
+    def check_file_exist(file_name):
+        return os.path.exists(file_name)
