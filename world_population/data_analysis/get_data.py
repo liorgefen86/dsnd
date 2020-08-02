@@ -3,6 +3,16 @@ import json
 import math
 import pandas as pd
 from pandas import DataFrame
+import logging
+
+
+logging.basicConfig(
+    filename='log.txt',
+    filemode='a',
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    level=logging.DEBUG
+)
+logger = logging.getLogger(__name__)
 
 
 class WorldBankData:
@@ -20,6 +30,7 @@ class WorldBankData:
                 all countries will be considered
              args [dict]: additional filter to apply
         """
+        logger.info('Initiating WoldBankData object')
         self.indicator = indicator
         self.country = country
         self.date = date
@@ -36,6 +47,7 @@ class WorldBankData:
         Return:
              string of the base url
         """
+        logger.info('Setting-up base url')
         if self.indicator.lower() == 'all':
             url = f'{self.base_api_url}/indicator'
         elif self.indicator.lower() == 'source':
@@ -43,7 +55,7 @@ class WorldBankData:
         else:
             url = f'{self.base_api_url}/country/{self.country}/indicator' \
                f'/{self.indicator}'
-
+        logger.info(f'Base url: {url}')
         return url
 
     def get(self) -> None:
@@ -54,6 +66,8 @@ class WorldBankData:
         Return:
              None
         """
+        logger.info('Starting getting data from World Bank database')
+
         def get_data(page: int = 1, per_page: int = 1):
             params = {
                 'format': 'json',
@@ -68,12 +82,22 @@ class WorldBankData:
                 url=self.url,
                 params=params
             )
+            logger.info(f'Pages {page} out of {n_pages}, from: {r.url}')
             return r.json()
 
         total = int(get_data()[0]['total'])
 
         per_page = 1000
         n_pages = math.ceil(total / per_page)
+
+        logger.info(
+            f'Summary: total records to download: {total}, '
+            f'number of pages: {n_pages}'
+        )
+        if n_pages > 1:
+            logger.warning('High number of records. It might take a few '
+                           'minutes.')
+
         data = []
         first_round = True
         for page in range(1,  n_pages+1):
@@ -98,15 +122,18 @@ class WorldBankData:
         if not self.data_downloaded:
             error_message = f'The data was not yet downloaded. Please run ' \
                             f'{self.__class__}.get() first'
+            logger.error(error_message)
             raise ValueError(error_message)
 
         if not file_name:
             file_name = f'{self.indicator}.{self.country}'
 
         if self.data_transformed:
+            logger.info(f'Saving transformed data to file - {file_name}')
             self.data.to_json(f'{file_name}.json', orient='records',
                               lines=True)
         else:
+            logger.info(f'Saving data to file - {file_name}')
             with open(f'{file_name}.json', 'w', encoding='utf8') as file:
                 json.dump(self.data, file, indent=4, ensure_ascii=False)
 
@@ -117,6 +144,7 @@ class WorldBankData:
         Return:
              None
         """
+        logger.info(f'Transforming {self.indicator} data')
         headers = self.data[1][0].keys()
         df = pd.DataFrame(columns=headers)
 
@@ -131,12 +159,14 @@ class WorldBankData:
 
     @staticmethod
     def get_indicators_list():
+        logger.info('Getting indicators data')
         data = WorldBankData(indicator='all')
         data.get()
         data.save('indicators')
 
     @staticmethod
     def get_sources_list():
+        logger.info('Getting sources data')
         data = WorldBankData(indicator='source')
         data.get()
         data.save('sources')
