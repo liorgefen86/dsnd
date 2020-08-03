@@ -4,8 +4,9 @@ import math
 import os
 import pandas as pd
 from pandas import DataFrame
+from typing import Callable
 import logging
-
+from functools import wraps
 
 logging.basicConfig(
     filename='log.txt',
@@ -17,7 +18,6 @@ logger = logging.getLogger(__name__)
 
 
 class WorldBankData:
-
     # base api url that is used to query WB database
     base_api_url = "http://api.worldbank.org/v2"
 
@@ -54,6 +54,22 @@ class WorldBankData:
         self.data_downloaded = False
         self.data_transformed = False
 
+    def exception(func: Callable):
+        """
+
+        Return:
+             wrapper function
+        """
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            try:
+                return func(self, *args, **kwargs)
+            except Exception as error:
+                logger.error(str(error))
+
+        return wrapper
+
+    @exception
     def _create_url(self) -> str:
         """
         Used to create base url for querying WB database.
@@ -72,6 +88,7 @@ class WorldBankData:
         logger.info(f'Base url: {url}')
         return url
 
+    @exception
     def get(self) -> None:
         """
         Used to get the data from World Bank database. This function need to be
@@ -127,6 +144,7 @@ class WorldBankData:
         self.data = data
         self.data_downloaded = True
 
+    @exception
     def save(self, file_name: str = None) -> None:
         """
         Function used to save the extracted data to a json file
@@ -138,7 +156,6 @@ class WorldBankData:
         if not self.data_downloaded:
             error_message = f'The data was not yet downloaded. Please run ' \
                             f'{self.__class__}.get() first'
-            logger.error(error_message)
             raise ValueError(error_message)
 
         if self.data_transformed:
@@ -150,9 +167,11 @@ class WorldBankData:
             with open(self.file_name, 'w', encoding='utf8') as file:
                 json.dump(self.data, file, indent=4, ensure_ascii=False)
 
+    @exception
     def define_file_name(self):
         return f'{self.indicator}_{self.country}.json'
 
+    @exception
     def transform_data(self) -> DataFrame:
         """
         Transform extracted data into a pandas DataFrame
