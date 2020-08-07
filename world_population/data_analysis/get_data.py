@@ -22,7 +22,7 @@ class WorldBankData:
     base_api_url = "http://api.worldbank.org/v2"
 
     def __init__(self, indicator: str = 'SP.POP.TOTL', country: str = 'all',
-                 date: str = '1960:2019', file_name: str = None,
+                 date: str = None, file_name: str = None,
                  over_write: bool = False, **args):
         """
         Class used to interact with World Bank database
@@ -78,7 +78,7 @@ class WorldBankData:
              string of the base url
         """
         logger.info('Setting-up base url')
-        if self.indicator.lower() == 'all':
+        if self.indicator.lower() == 'indicator':
             url = f'{self.base_api_url}/indicator'
         elif self.indicator.lower() == 'source':
             url = f'{self.base_api_url}/source'
@@ -108,7 +108,8 @@ class WorldBankData:
                 'page': page,
                 **self.args
             }
-            if self.indicator.lower() not in ['all', 'source']:
+            if self.indicator.lower() not in ['all', 'source'] \
+                    and not self.date:
                 params['date'] = self.date
 
             r = requests.get(
@@ -183,9 +184,23 @@ class WorldBankData:
         headers = self.data[1][0].keys()
         df = pd.DataFrame(columns=headers)
 
-        for item in self.data[1]:
-            df = df.append(pd.DataFrame(item, columns=headers).loc['value', :],
-                           ignore_index=True)
+        try:
+            for ind, item in enumerate(self.data[1]):
+                row = dict()
+                for key, value in item.items():
+                    if type(value) == list and value and value[0]:
+                        row[key] = [value[0]['value']]
+                    elif type(value) == dict and value:
+                        row[key] = [value['value']]
+                    else:
+                        row[key] = [value]
+
+                df = df.append(pd.DataFrame(row, columns=headers),
+                               ignore_index=True)
+        except Exception as error:
+            error_message = f'An error occurred while transforming data into' \
+                            f' pandas DataFrame: {str(error)}'
+            raise ValueError(error_message)
 
         self.data = df
         self.data_transformed = True
@@ -195,8 +210,9 @@ class WorldBankData:
     @staticmethod
     def get_indicators_list():
         logger.info('Getting indicators data')
-        data = WorldBankData(indicator='all')
+        data = WorldBankData(indicator='indicator')
         data.get()
+        data.transform_data()
         data.save('indicators')
 
     @staticmethod
@@ -204,6 +220,7 @@ class WorldBankData:
         logger.info('Getting sources data')
         data = WorldBankData(indicator='source')
         data.get()
+        data.transform_data()
         data.save('sources')
 
     @staticmethod
